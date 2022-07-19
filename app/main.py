@@ -125,7 +125,7 @@ def get_args():
         default=DEFARGS['THREADS'],
         type=int,
         metavar="<number of threads>",
-        help="Set number of threads (%(default)s)",
+        help="Set number of threads (Windows only) (%(default)s)",
     )
     parser.add_argument(
         "--suggestions", default=DEFARGS['SUGGESTIONS'], action="store_true", help="Allow user suggestions"
@@ -151,19 +151,21 @@ def main():
         if args.debug:
             app.run(host=args.host, port=args.port)
         else:
-            from waitress import serve
-
             url_scheme = "https" if args.ssl else "http"
             print("Running on %s://%s:%s" % (url_scheme, args.host, args.port))
 
-            serve(
-                app,
-                host=args.host,
-                port=args.port,
-                url_scheme=url_scheme,
-                threads=args.threads
-            )
-
+            if sys.platform == 'win32':
+                from waitress import serve
+                serve(
+                    app,
+                    host=args.host,
+                    port=args.port,
+                    url_scheme=url_scheme,
+                    threads=args.threads
+                )
+            else:
+                import bjoern
+                bjoern.run(app, args.host, args.port)
 
 if __name__ == "__main__":
     main()

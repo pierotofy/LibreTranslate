@@ -7,7 +7,7 @@ WORKDIR /app
 
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update -qq \
-  && apt-get -qqq install --no-install-recommends -y libicu-dev pkg-config gcc g++ \
+  && apt-get -qqq install --no-install-recommends -y libev-dev libicu-dev pkg-config gcc g++ \
   && apt-get clean \
   && rm -rf /var/lib/apt
 
