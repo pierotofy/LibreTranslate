@@ -1,10 +1,11 @@
-import os
 import json
+import os
 from functools import lru_cache
+
 from flask_babel import gettext as _
 from flask_babel import lazy_gettext as _lazy
+from markupsafe import Markup, escape
 
-from markupsafe import escape, Markup
 
 @lru_cache(maxsize=None)
 def get_available_locales(only_reviewed=True, sort_by_name=False):
@@ -43,7 +44,7 @@ def get_alternate_locale_links():
     tmpl = os.environ.get("LT_LOCALE_LINK_TEMPLATE")
     if tmpl is None:
         return []
-    
+
     locales = get_available_locale_codes()
     result = []
     for l in locales:

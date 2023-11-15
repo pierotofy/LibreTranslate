@@ -36,6 +36,13 @@ def get_args():
         help="Storage URI to use for request limit data storage. See https://flask-limiter.readthedocs.io/en/stable/configuration.html. (%(default)s)",
     )
     parser.add_argument(
+        "--hourly-req-limit",
+        default=DEFARGS['HOURLY_REQ_LIMIT'],
+        type=int,
+        metavar="<number>",
+        help="Set the default maximum number of requests per hour per client, in addition to req-limit. (%(default)s)",
+    )
+    parser.add_argument(
         "--daily-req-limit",
         default=DEFARGS['DAILY_REQ_LIMIT'],
         type=int,
@@ -161,6 +168,9 @@ def get_args():
         "--update-models", default=DEFARGS['UPDATE_MODELS'], action="store_true", help="Update language models at startup"
     )
     parser.add_argument(
+        "--force-update-models", default=DEFARGS['FORCE_UPDATE_MODELS'], action="store_true", help="Install/Reinstall language models at startup"
+    )
+    parser.add_argument(
         "--metrics",
         default=DEFARGS['METRICS'],
         action="store_true",
@@ -197,7 +207,7 @@ def main():
             from waitress import serve
 
             url_scheme = "https" if args.ssl else "http"
-            print("Running on %s://%s:%s%s" % (url_scheme, args.host, args.port, args.url_prefix))
+            print(f"Running on {url_scheme}://{args.host}:{args.port}{args.url_prefix}")
 
             serve(
                 app,

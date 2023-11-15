@@ -1,17 +1,19 @@
 #!/usr/bin/env python
-import sys
 import os
+import sys
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-import re
-import polib
 import json
+import re
+
+import polib
 from babel.messages.frontend import main as pybabel
-from libretranslate.language import load_languages, improve_translation_formatting
-from libretranslate.locales import get_available_locale_codes, swag_eval
-from translatehtml import translate_html
-from libretranslate.app import get_version, create_app
-from libretranslate.main import get_args
 from flask_swagger import swagger
+from libretranslate.app import create_app, get_version
+from libretranslate.language import improve_translation_formatting, load_languages
+from libretranslate.locales import get_available_locale_codes, swag_eval
+from libretranslate.main import get_args
+from translatehtml import translate_html
 
 # Update strings
 if __name__ == "__main__":
@@ -52,7 +54,7 @@ if __name__ == "__main__":
 
     messagespot = os.path.join(locales_dir, "messages.pot")
     print("Updating %s" % messagespot)
-    sys.argv = ["", "extract", "-F", "babel.cfg", "-k", "_e _h", 
+    sys.argv = ["", "extract", "-F", "babel.cfg", "-k", "_e _h",
                 "--copyright-holder", "LibreTranslate Authors",
                 "--project", "LibreTranslate",
                 "--version", get_version(),
@@ -74,11 +76,11 @@ if __name__ == "__main__":
         if not os.path.isfile(meta_file):
             with open(meta_file, 'w') as f:
                 f.write(json.dumps({
-                    'name': next((lang.name for lang in languages if lang.code == l)),
+                    'name': next(lang.name for lang in languages if lang.code == l),
                     'reviewed': False
                 }, indent=4))
                 print("Wrote %s" % meta_file)
-    
+
     # Automatically translate strings with libretranslate
     # when a language model is available and a string is empty
 
@@ -101,10 +103,10 @@ if __name__ == "__main__":
             print("Translating '%s'" % locale)
             pofile = polib.pofile(messages_file)
             c = 0
-            
+
             for entry in pofile.untranslated_entries():
                 text = entry.msgid
-                
+
                 # Extract placeholders
                 placeholders = re.findall(r'%\(?[^\)]*\)?s', text)
 
@@ -124,11 +126,11 @@ if __name__ == "__main__":
                     else:
                         # Meh, append
                         translated += " " + placeholders[p]
-                
+
                 print(entry.msgid, " --> ", translated)
                 entry.msgstr = translated
                 c += 1
-            
+
             if c > 0:
                 pofile.save(messages_file)
                 print("Saved %s" % messages_file)

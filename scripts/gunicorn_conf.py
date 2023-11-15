@@ -1,6 +1,8 @@
-from prometheus_client import multiprocess
 import re
 import sys
+
+from prometheus_client import multiprocess
+
 
 def child_exit(server, worker):
     multiprocess.mark_process_dead(worker.pid)
@@ -34,8 +36,8 @@ def on_starting(server):
             sys.argv.append(kwargs[k])
 
     args = get_args()
-    
-    from libretranslate import storage, scheduler, flood, secret
+
+    from libretranslate import flood, scheduler, secret, storage
     storage.setup(args.shared_storage)
     scheduler.setup(args)
     flood.setup(args)

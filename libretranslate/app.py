@@ -1,30 +1,37 @@
 import io
 import os
-import tempfile
 import re
+import tempfile
 import uuid
+from datetime import datetime
 from functools import wraps
 from html import unescape
 from timeit import default_timer
-from datetime import datetime
 
 import argostranslatefiles
 from argostranslatefiles import get_supported_formats
-from flask import (abort, Blueprint, Flask, jsonify, render_template, request,
-                   Response, send_file, url_for, session)
+from flask import Blueprint, Flask, Response, abort, jsonify, render_template, request, send_file, session, url_for
+from flask_babel import Babel
+from flask_session import Session
 from flask_swagger import swagger
 from flask_swagger_ui import get_swaggerui_blueprint
-from flask_session import Session
 from translatehtml import translate_html
-from werkzeug.utils import secure_filename
 from werkzeug.exceptions import HTTPException
 from werkzeug.http import http_date
-from flask_babel import Babel
+from werkzeug.utils import secure_filename
 
-from libretranslate import scheduler, flood, secret, remove_translated_files, security, storage
+from libretranslate import flood, remove_translated_files, scheduler, secret, security, storage
 from libretranslate.language import detect_languages, improve_translation_formatting
-from libretranslate.locales import (_, _lazy, get_available_locales, get_available_locale_codes, gettext_escaped, 
-        gettext_html, lazy_swag, get_alternate_locale_links)
+from libretranslate.locales import (
+    _,
+    _lazy,
+    get_alternate_locale_links,
+    get_available_locale_codes,
+    get_available_locales,
+    gettext_escaped,
+    gettext_html,
+    lazy_swag,
+)
 
 from .api_keys import Database, RemoteDatabase
 from .suggestions import Database as SuggestionsDatabase
@@ -96,7 +103,7 @@ def get_req_limits(default_limit, api_keys_db, multiplier=1):
     return req_limit
 
 
-def get_routes_limits(default_req_limit, daily_req_limit, api_keys_db):
+def get_routes_limits(default_req_limit, hourly_req_limit, daily_req_limit, api_keys_db):
     if default_req_limit == -1:
         # TODO: better way?
         default_req_limit = 9999999999999
@@ -104,10 +111,16 @@ def get_routes_limits(default_req_limit, daily_req_limit, api_keys_db):
     def minute_limits():
         return "%s per minute" % get_req_limits(default_req_limit, api_keys_db)
 
+    def hourly_limits():
+        return "%s per hour" % get_req_limits(hourly_req_limit, api_keys_db, int(os.environ.get("LT_HOURLY_REQ_LIMIT_MULTIPLIER", 60)))
+
     def daily_limits():
-        return "%s per day" % get_req_limits(daily_req_limit, api_keys_db, 1440)
+        return "%s per day" % get_req_limits(daily_req_limit, api_keys_db, int(os.environ.get("LT_DAILY_REQ_LIMIT_MULTIPLIER", 1440)))
 
     res = [minute_limits]
+
+    if hourly_req_limit > 0:
+      res.append(hourly_limits)
 
     if daily_req_limit > 0:
         res.append(daily_limits)
@@ -118,12 +131,12 @@ def get_routes_limits(default_req_limit, daily_req_limit, api_keys_db):
 def create_app(args):
     from libretranslate.init import boot
 
-    boot(args.load_only, args.update_models)
+    boot(args.load_only, args.update_models, args.force_update_models)
 
     from libretranslate.language import load_languages
 
-    SWAGGER_URL = args.url_prefix + "/docs"  # Swagger UI (w/o trailing '/')
-    API_URL = args.url_prefix + "/spec"
+    swagger_url = args.url_prefix + "/docs"  # Swagger UI (w/o trailing '/')
+    api_url = args.url_prefix + "/spec"
 
     bp = Blueprint('Main app', __name__)
 
@@ -149,11 +162,8 @@ def create_app(args):
     if frontend_argos_language_source is None:
         frontend_argos_language_source = languages[0]
 
-    
-    if len(languages) >= 2:
-        language_target_fallback = languages[1]
-    else:
-        language_target_fallback = languages[0]
+
+    language_target_fallback = languages[1] if len(languages) >= 2 else languages[0]
 
     if args.frontend_language_target == "locale":
       def resolve_language_locale():
@@ -182,20 +192,17 @@ def create_app(args):
 
     api_keys_db = None
 
-    if args.req_limit > 0 or args.api_keys or args.daily_req_limit > 0:
+    if args.req_limit > 0 or args.api_keys or args.daily_req_limit > 0 or args.hourly_req_limit > 0:
         api_keys_db = None
         if args.api_keys:
-            if args.api_keys_remote:
-                api_keys_db = RemoteDatabase(args.api_keys_remote)
-            else:
-                api_keys_db = Database(args.api_keys_db_path)
+            api_keys_db = RemoteDatabase(args.api_keys_remote) if args.api_keys_remote else Database(args.api_keys_db_path)
 
         from flask_limiter import Limiter
 
         limiter = Limiter(
             key_func=get_remote_address,
             default_limits=get_routes_limits(
-                args.req_limit, args.daily_req_limit, api_keys_db
+                args.req_limit, args.hourly_req_limit, args.daily_req_limit, api_keys_db
             ),
             storage_uri=args.req_limit_storage,
         )
@@ -219,8 +226,8 @@ def create_app(args):
           if not os.path.isdir(default_mp_dir):
             os.mkdir(default_mp_dir)
           os.environ["PROMETHEUS_MULTIPROC_DIR"] = default_mp_dir
-        
-      from prometheus_client import CONTENT_TYPE_LATEST, Summary, Gauge, CollectorRegistry, multiprocess, generate_latest
+
+      from prometheus_client import CONTENT_TYPE_LATEST, CollectorRegistry, Gauge, Summary, generate_latest, multiprocess
 
       @bp.route("/metrics")
       @limiter.exempt
@@ -229,7 +236,7 @@ def create_app(args):
           authorization = request.headers.get('Authorization')
           if authorization != "Bearer " + args.metrics_auth_token:
             abort(401, description=_("Unauthorized"))
-        
+
         registry = CollectorRegistry()
         multiprocess.MultiProcessCollector(registry)
         return Response(generate_latest(registry), mimetype=CONTENT_TYPE_LATEST)
@@ -258,13 +265,13 @@ def create_app(args):
                 else:
                   need_key = False
                   key_missing = api_keys_db.lookup(ak) is None
-                  
+
                   if (args.require_api_key_origin
                       and key_missing
                       and not re.match(args.require_api_key_origin, request.headers.get("Origin", ""))
                   ):
                     need_key = True
-                  
+
                   if (args.require_api_key_secret
                     and key_missing
                     and not secret.secret_match(get_req_secret())
@@ -280,7 +287,7 @@ def create_app(args):
                         description=description,
                     )
             return f(*a, **kw)
-        
+
         if args.metrics:
           @wraps(func)
           def measure_func(*a, **kw):
@@ -302,7 +309,7 @@ def create_app(args):
           return measure_func
         else:
           return func
-    
+
     @bp.errorhandler(400)
     def invalid_api(e):
         return jsonify({"error": str(e.description)}), 400
@@ -338,7 +345,7 @@ def create_app(args):
             get_api_key_link=args.get_api_key_link,
             web_version=os.environ.get("LT_WEB") is not None,
             version=get_version(),
-            swagger_url=SWAGGER_URL,
+            swagger_url=swagger_url,
             available_locales=[{'code': l['code'], 'name': _lazy(l['name'])} for l in get_available_locales(not args.debug)],
             current_locale=get_locale(),
             alternate_locales=get_alternate_locale_links()
@@ -350,17 +357,17 @@ def create_app(args):
       if args.disable_web_ui:
             abort(404)
 
-      response = Response(render_template("app.js.template", 
+      response = Response(render_template("app.js.template",
             url_prefix=args.url_prefix,
             get_api_key_link=args.get_api_key_link,
             api_secret=secret.get_current_secret() if args.require_api_key_secret else ""), content_type='application/javascript; charset=utf-8')
-      
+
       if args.require_api_key_secret:
         response.headers['Last-Modified'] = http_date(datetime.now())
         response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, post-check=0, pre-check=0, max-age=0'
         response.headers['Pragma'] = 'no-cache'
         response.headers['Expires'] = '-1'
-      
+
       return response
 
     @bp.get("/languages")
@@ -527,6 +534,12 @@ def create_app(args):
         if not target_lang:
             abort(400, description=_("Invalid request: missing %(name)s parameter", name='target'))
 
+        if not request.is_json:
+            # Normalize line endings to UNIX style (LF) only so we can consistently
+            # enforce character limits.
+            # https://www.rfc-editor.org/rfc/rfc2046#section-4.1.1
+            q = "\n".join(q.splitlines())
+
         batch = isinstance(q, list)
 
         if batch and args.batch_limit != -1:
@@ -538,10 +551,7 @@ def create_app(args):
                 )
 
         if args.char_limit != -1:
-            if batch:
-                chars = sum([len(text) for text in q])
-            else:
-                chars = len(q)
+            chars = sum([len(text) for text in q]) if batch else len(q)
 
             if args.char_limit < chars:
                 abort(
@@ -550,36 +560,15 @@ def create_app(args):
                 )
 
         if source_lang == "auto":
-            source_langs = []
-            if batch:
-                auto_detect_texts = q
-            else:
-                auto_detect_texts = [q]
-
-            overall_candidates = detect_languages(q)
-
-            for text_to_check in auto_detect_texts:
-                if len(text_to_check) > 40:
-                    candidate_langs = detect_languages(text_to_check)
-                else:
-                    # Unable to accurately detect languages for short texts
-                    candidate_langs = overall_candidates
-                source_langs.append(candidate_langs[0])
-
-                if args.debug:
-                    print(text_to_check, candidate_langs)
-                    print("Auto detected: %s" % candidate_langs[0]["language"])
+            candidate_langs = detect_languages(q if batch else [q])
+            detected_src_lang = candidate_langs[0]
         else:
-            if batch:
-                source_langs = [ {"confidence": 100.0, "language": source_lang} for text in q]
-            else:
-                source_langs = [ {"confidence": 100.0, "language": source_lang} ]
+            detected_src_lang = {"confidence": 100.0, "language": source_lang}
 
-        src_langs = [next(iter([l for l in languages if l.code == source_lang["language"]]), None) for source_lang in source_langs]
+        src_lang = next(iter([l for l in languages if l.code == detected_src_lang["language"]]), None)
 
-        for idx, lang in enumerate(src_langs):
-            if lang is None:
-                abort(400, description=_("%(lang)s is not supported", lang=source_langs[idx]))
+        if src_lang is None:
+            abort(400, description=_("%(lang)s is not supported", lang=source_lang))
 
         tgt_lang = next(iter([l for l in languages if l.code == target_lang]), None)
 
@@ -595,10 +584,10 @@ def create_app(args):
         try:
             if batch:
                 results = []
-                for idx, text in enumerate(q):
-                    translator = src_langs[idx].get_translation(tgt_lang)
+                for text in q:
+                    translator = src_lang.get_translation(tgt_lang)
                     if translator is None:
-                        abort(400, description=_("%(tname)s (%(tcode)s) is not available as a target language from %(sname)s (%(scode)s)", tname=_lazy(tgt_lang.name), tcode=tgt_lang.code, sname=_lazy(src_langs[idx].name), scode=src_langs[idx].code))
+                        abort(400, description=_("%(tname)s (%(tcode)s) is not available as a target language from %(sname)s (%(scode)s)", tname=_lazy(tgt_lang.name), tcode=tgt_lang.code, sname=_lazy(src_lang.name), scode=src_lang.code))
 
                     if text_format == "html":
                         translated_text = str(translate_html(translator, text))
@@ -610,7 +599,7 @@ def create_app(args):
                     return jsonify(
                         {
                             "translatedText": results,
-                            "detectedLanguage": source_langs
+                            "detectedLanguage": [detected_src_lang] * len(q)
                         }
                     )
                 else:
@@ -620,9 +609,9 @@ def create_app(args):
                           }
                     )
             else:
-                translator = src_langs[0].get_translation(tgt_lang)
+                translator = src_lang.get_translation(tgt_lang)
                 if translator is None:
-                    abort(400, description=_("%(tname)s (%(tcode)s) is not available as a target language from %(sname)s (%(scode)s)", tname=_lazy(tgt_lang.name), tcode=tgt_lang.code, sname=_lazy(src_langs[0].name), scode=src_langs[0].code))
+                    abort(400, description=_("%(tname)s (%(tcode)s) is not available as a target language from %(sname)s (%(scode)s)", tname=_lazy(tgt_lang.name), tcode=tgt_lang.code, sname=_lazy(src_lang.name), scode=src_lang.code))
 
                 if text_format == "html":
                     translated_text = str(translate_html(translator, q))
@@ -633,7 +622,7 @@ def create_app(args):
                     return jsonify(
                         {
                             "translatedText": unescape(translated_text),
-                            "detectedLanguage": source_langs[0]
+                            "detectedLanguage": detected_src_lang
                         }
                     )
                 else:
@@ -643,6 +632,7 @@ def create_app(args):
                         }
                     )
         except Exception as e:
+            raise e
             abort(500, description=_("Cannot translate text: %(text)s", text=str(e)))
 
     @bp.post("/translate_file")
@@ -749,12 +739,10 @@ def create_app(args):
         if os.path.splitext(file.filename)[1] not in frontend_argos_supported_files_format:
             abort(400, description=_("Invalid request: file format not supported"))
 
-        source_langs = [source_lang]
-        src_langs = [next(iter([l for l in languages if l.code == source_lang]), None) for source_lang in source_langs]
+        src_lang = next(iter([l for l in languages if l.code == source_lang]), None)
 
-        for idx, lang in enumerate(src_langs):
-            if lang is None:
-                abort(400, description=_("%(lang)s is not supported", lang=source_langs[idx]))
+        if src_lang is None:
+            abort(400, description=_("%(lang)s is not supported", lang=source_lang))
 
         tgt_lang = next(iter([l for l in languages if l.code == target_lang]), None)
 
@@ -767,7 +755,7 @@ def create_app(args):
 
             file.save(filepath)
 
-            translated_file_path = argostranslatefiles.translate_file(src_langs[0].get_translation(tgt_lang), filepath)
+            translated_file_path = argostranslatefiles.translate_file(src_lang.get_translation(tgt_lang), filepath)
             translated_filename = os.path.basename(translated_file_path)
 
             return jsonify(
@@ -791,7 +779,7 @@ def create_app(args):
             checked_filepath = security.path_traversal_check(filepath, get_upload_dir())
             if os.path.isfile(checked_filepath):
                 filepath = checked_filepath
-        except security.SuspiciousFileOperation:
+        except security.SuspiciousFileOperationError:
             abort(400, description=_("Invalid filename"))
 
         return_data = io.BytesIO()
@@ -978,7 +966,6 @@ def create_app(args):
         )
 
     @bp.post("/suggest")
-    @access_check
     def suggest():
         """
         Submit a suggestion to improve a translation
@@ -1037,10 +1024,17 @@ def create_app(args):
         if not args.suggestions:
             abort(403, description=_("Suggestions are disabled on this server."))
 
-        q = request.values.get("q")
-        s = request.values.get("s")
-        source_lang = request.values.get("source")
-        target_lang = request.values.get("target")
+        if request.is_json:
+            json = get_json_dict(request)
+            q = json.get("q")
+            s = json.get("s")
+            source_lang = json.get("source")
+            target_lang = json.get("target")
+        else:
+            q = request.values.get("q")
+            s = request.values.get("s")
+            source_lang = request.values.get("source")
+            target_lang = request.values.get("target")
 
         if not q:
             abort(400, description=_("Invalid request: missing %(name)s parameter", name='q'))
@@ -1067,14 +1061,14 @@ def create_app(args):
         app.register_blueprint(bp, url_prefix=args.url_prefix)
     else:
         app.register_blueprint(bp)
-    
+
     limiter.init_app(app)
 
     swag = swagger(app)
     swag["info"]["version"] = get_version()
     swag["info"]["title"] = "LibreTranslate"
 
-    @app.route(API_URL)
+    @app.route(api_url)
     @limiter.exempt
     def spec():
         return jsonify(lazy_swag(swag))
@@ -1087,14 +1081,14 @@ def create_app(args):
             return override_lang
         return session.get('preferred_lang', request.accept_languages.best_match(get_available_locale_codes()))
 
-    babel = Babel(app, locale_selector=get_locale)
+    Babel(app, locale_selector=get_locale)
 
     app.jinja_env.globals.update(_e=gettext_escaped, _h=gettext_html)
 
     # Call factory function to create our blueprint
-    swaggerui_blueprint = get_swaggerui_blueprint(SWAGGER_URL, API_URL)
+    swaggerui_blueprint = get_swaggerui_blueprint(swagger_url, api_url)
     if args.url_prefix:
-        app.register_blueprint(swaggerui_blueprint, url_prefix=SWAGGER_URL)
+        app.register_blueprint(swaggerui_blueprint, url_prefix=swagger_url)
     else:
         app.register_blueprint(swaggerui_blueprint)
 

@@ -2,7 +2,7 @@
 
 [Try it online!](https://libretranslate.com) | [API Docs](https://libretranslate.com/docs) | [Community Forum](https://community.libretranslate.com/)
 
-[![Python versions](https://img.shields.io/pypi/pyversions/libretranslate)](https://pypi.org/project/libretranslate) [![Run tests](https://github.com/LibreTranslate/LibreTranslate/workflows/Run%20tests/badge.svg)](https://github.com/LibreTranslate/LibreTranslate/actions?query=workflow%3A%22Run+tests%22) [![Build and Publish Docker Image](https://github.com/LibreTranslate/LibreTranslate/actions/workflows/publish-docker.yml/badge.svg)](https://github.com/LibreTranslate/LibreTranslate/actions/workflows/publish-docker.yml) [![Publish package](https://github.com/LibreTranslate/LibreTranslate/actions/workflows/publish-package.yml/badge.svg)](https://github.com/LibreTranslate/LibreTranslate/actions/workflows/publish-package.yml) [![Awesome Humane Tech](https://raw.githubusercontent.com/humanetech-community/awesome-humane-tech/main/humane-tech-badge.svg?sanitize=true)](https://github.com/humanetech-community/awesome-humane-tech)
+[![Python versions](https://img.shields.io/pypi/pyversions/libretranslate)](https://pypi.org/project/libretranslate) [![Run tests](https://github.com/LibreTranslate/LibreTranslate/workflows/Run%20tests/badge.svg)](https://github.com/LibreTranslate/LibreTranslate/actions?query=workflow%3A%22Run+tests%22) [![Build and Publish Docker Image](https://github.com/LibreTranslate/LibreTranslate/actions/workflows/publish-docker.yml/badge.svg)](https://github.com/LibreTranslate/LibreTranslate/actions/workflows/publish-docker.yml) [![Publish package](https://github.com/LibreTranslate/LibreTranslate/actions/workflows/publish-package.yml/badge.svg)](https://github.com/LibreTranslate/LibreTranslate/actions/workflows/publish-package.yml) [![Awesome Humane Tech](https://raw.githubusercontent.com/humanetech-community/awesome-humane-tech/main/humane-tech-badge.svg?sanitize=true)](https://codeberg.org/teaserbot-labs/delightful-humane-design)
 
 Free and Open Source Machine Translation API, entirely self-hosted. Unlike other APIs, it doesn't rely on proprietary providers such as Google or Azure to perform translations. Instead, its translation engine is powered by the open source [Argos Translate](https://github.com/argosopentech/argos-translate) library.
 
@@ -110,52 +110,25 @@ Then open a web browser to <http://localhost:5000>
 
 On Ubuntu 20.04 you can also use the install script available at <https://github.com/argosopentech/LibreTranslate-init>
 
+## Run with Docker
+
+You can also run the application with [docker](https://docker.com):
+
+### Linux/macOS
+
+```bash
+./run.sh [args]
+```
+
+### Windows
+
+```bash
+run.bat [args]
+```
+
 ## Build and Run
 
-If you want to make changes to the code, you can build from source, and run the API:
-
-```bash
-git clone https://github.com/LibreTranslate/LibreTranslate
-cd LibreTranslate
-pip install -e .
-libretranslate [args]
-
-# Or
-python main.py [args]
-```
-
-Then open a web browser to <http://localhost:5000>
-
-### Run with Docker
-
-Linux/MacOS: `./run.sh [args]`
-Windows: `run.bat [args]`
-
-Then open a web browser to <http://localhost:5000>
-
-### Build with Docker
-
-```bash
-docker build -f docker/Dockerfile [--build-arg with_models=true] -t libretranslate .
-```
-
-If you want to run the Docker image in a complete offline environment, you need to add the `--build-arg with_models=true` parameter. Then the language models are downloaded during the build process of the image. Otherwise these models get downloaded on the first run of the image/container.
-
-Run the built image:
-
-```bash
-docker run -it -p 5000:5000 libretranslate [args]
-```
-
-Or build and run using `docker-compose`:
-
-```bash
-docker-compose up -d --build
-```
-
-> Feel free to change the [`docker-compose.yml`](https://github.com/LibreTranslate/LibreTranslate/blob/main/docker-compose.yml) file to adapt it to your deployment needs, or use an extra `docker-compose.prod.yml` file for your deployment configuration.
->
-> The models are stored inside the container under `/home/libretranslate/.local/share` and `/home/libretranslate/.local/cache`. Feel free to use volumes if you do not want to redownload the models when the container is destroyed. To update the models, use the `--update-models` argument.
+See [CONTIRBUTING.md](./CONTRIBUTING.md) for information on how to build and run the project yourself.
 
 ### CUDA
 
@@ -164,7 +137,7 @@ You can use hardware acceleration to speed up translations on a GPU machine with
 Run this version with:
 
 ```bash
-docker-compose -f docker-compose.cuda.yml up -d --build
+docker compose -f docker-compose.cuda.yml up -d --build
 ```
 
 ## Arguments
@@ -364,6 +337,8 @@ hooks:
 
 Then issue `./launcher rebuild app`. From the Discourse's admin panel then select "LibreTranslate" as a translation provider and set the relevant endpoint configurations.
 
+See it in action on this [page](https://community.libretranslate.com/t/have-you-considered-adding-the-libretranslate-discourse-translator-multilingual-to-this-forum/766).
+
 ## Mobile Apps
 
 - [LibreTranslator](https://codeberg.org/BeoCode/LibreTranslator) is an Android app [available on the Play Store](https://play.google.com/store/apps/details?id=de.beowulf.libretranslater) and [in the F-Droid store](https://f-droid.org/packages/de.beowulf.libretranslater/) that uses the LibreTranslate API.
@@ -381,9 +356,10 @@ This is a list of public LibreTranslate instances, some require an API key. If y
 URL |API Key Required | Links
 --- | --- | ---
 [libretranslate.com](https://libretranslate.com)|:heavy_check_mark:|[ [Get API Key](https://portal.libretranslate.com) ] [ [Service Status](https://status.libretranslate.com/) ]
-[translate.argosopentech.com](https://translate.argosopentech.com/)|-
 [translate.foxhaven.cyou](https://translate.foxhaven.cyou/)|-
 [translate.terraprint.co](https://translate.terraprint.co/)|-
+[trans.zillyhuhn.com](https://trans.zillyhuhn.com/)|-
+[libretranslate.eownerdead.dedyn.io](https://libretranslate.eownerdead.dedyn.io)|-
 
 ## TOR/i2p Mirrors
 
@@ -394,9 +370,11 @@ URL |
 
 ## Adding New Language Models
 
-To add new languages you first need to train an Argos Translate model. See [this video](https://odysee.com/@argosopentech:7/training-an-Argos-Translate-model-tutorial-2022:2?r=DMnK7NqdPNHRCfwhmKY9LPow3PqVUUgw) for details.
+You have two options to create new language models:
+ * [Locomotive](https://github.com/LibreTranslate/Locomotive)
+ * [Argos Train](https://github.com/argosopentech/argos-train) ([video tutorial](https://www.youtube.com/watch?v=Vj_qgnhOEwg))
 
-First you need to collect data, for example from [Opus](http://opus.nlpl.eu/), then you need to add the data to [data-index.json](https://github.com/argosopentech/argos-train/blob/master/data-index.json) in the [Argos Train](https://github.com/argosopentech/argos-train) repo.
+Most of the training data is from [Opus](http://opus.nlpl.eu/), which is an open source parallel corpus. Check also [NLLU](https://nllu.libretranslate.com)
 
 ## Localization
 
@@ -428,7 +406,7 @@ Dutch |  | [Edit](https://hosted.weblate.org/translate/libretranslate/app/nl/)
 English | :heavy_check_mark: | [Edit](https://hosted.weblate.org/projects/libretranslate/app/)
 Esperanto | :heavy_check_mark: | [Edit](https://hosted.weblate.org/translate/libretranslate/app/eo/)
 Finnish |  | [Edit](https://hosted.weblate.org/translate/libretranslate/app/fi/)
-French |  | [Edit](https://hosted.weblate.org/translate/libretranslate/app/fr/)
+French | :heavy_check_mark: | [Edit](https://hosted.weblate.org/translate/libretranslate/app/fr/)
 German | :heavy_check_mark: | [Edit](https://hosted.weblate.org/translate/libretranslate/app/de/)
 Greek |  | [Edit](https://hosted.weblate.org/translate/libretranslate/app/el/)
 Hebrew |  | [Edit](https://hosted.weblate.org/translate/libretranslate/app/he/)
@@ -449,7 +427,7 @@ Slovak |  | [Edit](https://hosted.weblate.org/translate/libretranslate/app/sk/)
 Spanish | :heavy_check_mark: | [Edit](https://hosted.weblate.org/translate/libretranslate/app/es/)
 Swedish |  | [Edit](https://hosted.weblate.org/translate/libretranslate/app/sv/)
 Turkish |  | [Edit](https://hosted.weblate.org/translate/libretranslate/app/tr/)
-Ukranian |  | [Edit](https://hosted.weblate.org/translate/libretranslate/app/uk/)
+Ukranian | :heavy_check_mark: | [Edit](https://hosted.weblate.org/translate/libretranslate/app/uk/)
 Vietnamese |  | [Edit](https://hosted.weblate.org/translate/libretranslate/app/vi/)
 
 ## Roadmap

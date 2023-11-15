@@ -1,5 +1,7 @@
 import atexit
+
 from apscheduler.schedulers.background import BackgroundScheduler
+
 scheduler = None
 
 def setup(args):
@@ -16,7 +18,7 @@ def setup(args):
 
         if args.api_keys and args.require_api_key_secret:
             scheduler.add_job(func=rotate_secrets, trigger="interval", minutes=30)
-        
+
         scheduler.start()
 
         # Shut down the scheduler when exiting the app
